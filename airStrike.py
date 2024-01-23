@@ -3,8 +3,8 @@ import pygame
 import pygame.gfxdraw
 pygame.init()
 
-screen_size=(1600, 900)
-screen=pygame.display.set_mode(screen_size)
+screenSize=(1600, 900)
+screen=pygame.display.set_mode(screenSize)
 pygame.display.set_caption("Air Strike")
 
 clock = pygame.time.Clock()
@@ -12,51 +12,55 @@ framerate = 30
 realFps = 30
 
 gravityConst = 5
+dragConst = 0.1
 
 class DRONE:
-	def __init__(self, wingLen, lift, leftPos, rightPos):
+	def __init__(self, wingLen, lift, bodyRot, centPos):
 		self.wingLen = wingLen
 		self.lift = lift
-		self.leftPos = leftPos
-		self.leftVel = [0, 0]
-		self.rightPos = rightPos
-		self.rightVel = [0, 0]
+		self.bodyRot = bodyRot
+		self.rotVel = 0
+		self.centPos = centPos
+		self.centVel = [0, 0]
 		self.gunRot = 0
-		self.bodyRot = math.atan2(self.rightPos[1]-self.leftPos[1], self.rightPos[0]-self.leftPos[0]) + math.pi/2
-		print(self.bodyRot)
 		self.keys = {
 			"moveLeft": [97, False],
 			"moveRight": [100, False],
 			"gunLeft": [103, False],
 			"gunRight": [104, False],
 			"gunFire": [32, False]}
-	def applyGravity(self):
-		self.leftVel[1] += gravityConst/realFps
-		self.rightVel[1] += gravityConst/realFps
 	def applyThrust(self):
 		if self.keys["moveLeft"][1]:
-			self.leftVel[0] -= math.cos(self.bodyRot)*(self.lift/realFps)
-			self.leftVel[1] -= math.sin(self.bodyRot)*(self.lift/realFps)
+			self.rotVel += (self.lift/(2*math.pi))/realFps
+			self.centVel[0] -= math.cos(self.bodyRot)*(5*self.lift/realFps)
+			self.centVel[1] -= math.sin(self.bodyRot)*(5*self.lift/realFps)
 		if self.keys["moveRight"][1]:
-			self.rightVel[0] -= math.cos(self.bodyRot)*(self.lift/realFps)
-			self.rightVel[1] -= math.sin(self.bodyRot)*(self.lift/realFps)
+			self.rotVel -= (self.lift/(2*math.pi))/realFps
+			self.centVel[0] -= math.cos(self.bodyRot)*(5*self.lift/realFps)
+			self.centVel[1] -= math.sin(self.bodyRot)*(5*self.lift/realFps)
+	def applyNatForces(self):
+		self.centVel[1] += gravityConst/realFps
+		self.rotVel *= 1-(dragConst/realFps)
+		self.centVel[0] *= 1-(dragConst/realFps)
+		self.centVel[1] *= 1-(dragConst/realFps)
 	def applyVel(self):
-		self.leftPos[0] += self.leftVel[0]
-		self.leftPos[1] += self.leftVel[1]
-		self.rightPos[0] += self.rightVel[0]
-		self.rightPos[1] += self.rightVel[1]
-	def constrainBody(self):
-		self.bodyRot = math.atan2(self.rightPos[1]-self.leftPos[1], self.rightPos[0]-self.leftPos[0])
-		midpoint = [(self.rightPos[0]+self.leftPos[0])/2, (self.rightPos[1]+self.leftPos[1])/2]
+		self.centPos[0] += self.centVel[0]
+		self.centPos[1] += self.centVel[1]
+		self.bodyRot += self.rotVel
+		if self.bodyRot < 0:
+			self.bodyRot = 2*math.pi + self.bodyRot
+		if self.bodyRot >= 2*math.pi:
+			self.bodyRot = 2*math.pi - self.bodyRot
+	def drawSelf(self):
+		leftPos = [0, 0]
+		rightPos = [0, 0]
+		leftPos[0] = round(self.centPos[0] + math.cos(self.bodyRot+math.pi/2)*self.wingLen)
+		leftPos[1] = round(self.centPos[1] + math.sin(self.bodyRot+math.pi/2)*self.wingLen)
+		rightPos[0] = round(self.centPos[0] + math.cos(self.bodyRot-math.pi/2)*self.wingLen)
+		rightPos[1] = round(self.centPos[1] + math.sin(self.bodyRot-math.pi/2)*self.wingLen)
+		pygame.gfxdraw.line(screen, *leftPos, *rightPos, (255, 0, 0))
 
-		self.leftPos[0] = midpoint[0] + math.cos(self.bodyRot+math.pi)*self.wingLen
-		self.leftPos[1] = midpoint[1] + math.sin(self.bodyRot+math.pi)*self.wingLen
-		self.rightPos[0] = midpoint[0] + math.cos(self.bodyRot)*self.wingLen
-		self.rightPos[1] = midpoint[1] + math.sin(self.bodyRot)*self.wingLen
-
-		self.bodyRot += math.pi/2
-
-player = DRONE(30, 10, [790, 450], [810, 450])
+player = DRONE(30, 1, math.pi/2, [round(screenSize[0]/2), round(screenSize[1]/2)])
 
 while True:
 	clock.tick(framerate)
@@ -75,10 +79,9 @@ while True:
 						player.keys[key][1] = True
 					else:
 						player.keys[key][1] = False
-	player.applyGravity()
 	player.applyThrust()
+	player.applyNatForces()
 	player.applyVel()
-	player.constrainBody()
 	screen.fill((0, 0, 0))
-	pygame.gfxdraw.line(screen, *map(round, player.leftPos), *map(round, player.rightPos), (255, 0, 0))
+	player.drawSelf()
 	pygame.display.flip()
